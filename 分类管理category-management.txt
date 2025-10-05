@@ -1,0 +1,197 @@
+    <script>
+        // ====== 分类管理核心数据（与task-core分支共享localStorage，避免数据割裂） ======
+        let tasks = JSON.parse(localStorage.getItem('tasks')) || []; // 任务数据（用于筛选和迁移）
+        let customCategories = JSON.parse(localStorage.getItem('customCategories')) || ['旅行', '健康']; // 自定义分类数据
+        const reservedCategories = new Set(['全部', '工作', '学习', '生活', '购物', '其他']); // 内置分类（禁止删除/重复）
+
+        // ====== 页面初始化：渲染自定义分类、同步下拉框 ======
+        document.addEventListener('DOMContentLoaded', function() {
+            renderCustomCategories(); // 渲染自定义分类标签
+            updateCategorySelect();   // 同步自定义分类到任务添加下拉框
+            renderTasks();            // 初始化任务列表（仅用于筛选展示）
+        });
+
+        // ====== 1. 内置分类筛选功能 ======
+        function filterTasks(filter, el) {
+            // 切换标签激活状态
+            document.querySelectorAll('.category-tab').forEach(tab => tab.classList.remove('active'));
+            if (el) el.classList.add('active');
+            // 筛选并渲染任务（核心任务渲染逻辑归属于task-core分支，此处保留筛选逻辑）
+            renderTasks(filter);
+        }
+
+        // ====== 2. 自定义分类操作（添加、渲染、删除） ======
+        // 2.1 添加自定义分类（去重+内置分类校验）
+        function addCustomCategory() {
+            const input = document.getElementById('newCategoryInput');
+            const categoryName = input.value.trim();
+
+            if (!categoryName) return; // 空值校验
+            if (reservedCategories.has(categoryName)) { // 内置分类冲突校验
+                alert(`「${categoryName}」为内置分类，不能重复添加`);
+                input.value = '';
+                return;
+            }
+            if (customCategories.includes(categoryName)) { // 重复添加校验
+                alert(`「${categoryName}」分类已存在`);
+                input.value = '';
+                return;
+            }
+
+            // 新增分类并保存
+            customCategories.push(categoryName);
+            saveCustomCategories();
+            // 刷新视图
+            renderCustomCategories();
+            updateCategorySelect();
+            input.value = '';
+        }
+
+        // 2.2 渲染自定义分类标签（含点击添加任务、删除分类功能）
+        function renderCustomCategories() {
+            const container = document.getElementById('customCategoriesContainer');
+            container.innerHTML = ''; // 清空现有标签
+
+            customCategories.forEach(category => {
+                // 自定义分类标签
+                const tag = document.createElement('span');
+                tag.className = 'custom-category-tag';
+                tag.textContent = category;
+                tag.title = `点击添加「${category}」分类的任务`;
+                // 点击标签快速添加对应分类任务（联动任务添加功能）
+                tag.onclick = () => addTaskToCategory(category);
+
+                // 分类删除按钮
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-category-btn';
+                deleteBtn.textContent = '×';
+                deleteBtn.title = `删除「${category}」分类`;
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation(); // 阻止触发标签的“添加任务”事件
+                    deleteCustomCategory(category);
+                };
+
+                tag.appendChild(deleteBtn);
+                container.appendChild(tag);
+            });
+        }
+
+        // 2.3 删除自定义分类（含任务迁移）
+        function deleteCustomCategory(category) {
+            // 确认删除
+            const isConfirm = confirm(`确定删除「${category}」吗？该分类下的任务将迁移到「其他」`);
+            if (!isConfirm) return;
+
+            // 1. 从自定义分类列表中移除
+            customCategories = customCategories.filter(c => c !== category);
+            saveCustomCategories();
+
+            // 2. 迁移该分类下的任务到“其他”
+            let hasTaskChanged = false;
+            tasks = tasks.map(task => {
+                if (task.category === category) {
+                    hasTaskChanged = true;
+                    return { ...task, category: '其他' };
+                }
+                return task;
+            });
+            if (hasTaskChanged) {
+                localStorage.setItem('tasks', JSON.stringify(tasks)); // 保存任务变更
+            }
+
+            // 3. 刷新视图
+            updateCategorySelect();
+            renderCustomCategories();
+            renderTasks(); // 重新渲染任务列表（展示迁移结果）
+        }
+
+        // ====== 3. 分类联动功能（自定义分类同步到下拉框、点击分类添加任务） ======
+        // 3.1 同步自定义分类到任务添加下拉框
+        function updateCategorySelect() {
+            const select = document.getElementById('categorySelect');
+            const currentSelected = select.value; // 保留当前选中值
+
+            // 1. 保留内置分类选项（前5个），清空其余选项
+            const defaultOptions = Array.from(select.options).slice(0, 5);
+            select.innerHTML = '';
+            defaultOptions.forEach(opt => select.appendChild(opt));
+
+            // 2. 添加自定义分类选项
+            customCategories.forEach(category => {
+                const opt = document.createElement('option');
+                opt.value = category;
+                opt.textContent = category;
+                select.appendChild(opt);
+            });
+
+            // 3. 恢复之前的选中值（若已被删除则默认选中“其他”）
+            select.value = Array.from(select.options).some(opt => opt.value === currentSelected) 
+                ? currentSelected 
+                : '其他';
+        }
+
+        // 3.2 点击自定义分类标签快速添加任务（联动核心任务功能）
+        function addTaskToCategory(category) {
+            const taskInput = document.getElementById('taskInput');
+            const taskText = taskInput.value.trim();
+
+            if (!taskText) {
+                alert('请输入任务内容');
+                taskInput.focus();
+                return;
+            }
+
+            // 添加任务（核心任务添加逻辑归属于task-core分支，此处简化实现）
+            const newTask = {
+                id: Date.now(),
+                text: taskText,
+                completed: false,
+                category: category,
+                createdAt: new Date()
+            };
+            tasks.push(newTask);
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+
+            // 刷新视图
+            renderTasks();
+            taskInput.value = '';
+            taskInput.focus();
+        }
+
+        // ====== 辅助函数：保存自定义分类到localStorage ======
+        function saveCustomCategories() {
+            localStorage.setItem('customCategories', JSON.stringify(customCategories));
+        }
+
+        // ====== 辅助函数：渲染任务列表（仅用于展示分类筛选效果，核心逻辑归属于task-core分支） ======
+        function renderTasks(filter = document.querySelector('.category-tab.active')?.textContent || '全部') {
+            const taskList = document.getElementById('taskList');
+            // 筛选任务
+            const filteredTasks = filter === '全部' 
+                ? tasks 
+                : tasks.filter(task => task.category === filter);
+
+            // 渲染任务
+            if (filteredTasks.length === 0) {
+                taskList.innerHTML = '<div class="empty-state">暂无任务</div>';
+                return;
+            }
+            taskList.innerHTML = '';
+            filteredTasks.forEach(task => {
+                const li = document.createElement('li');
+                li.className = 'task-item';
+                li.innerHTML = `
+                    <span class="task-text">${task.text}</span>
+                    <span class="task-category">${task.category}</span>
+                `;
+                taskList.appendChild(li);
+            });
+        }
+
+        // ====== 键盘快捷操作（添加自定义分类） ======
+        document.getElementById('newCategoryInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addCustomCategory();
+        });
+    </script>
+</body>
+</html>
