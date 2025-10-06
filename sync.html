@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>待办事项 - 跨设备同步</title>
+    <style>
+        /* 基础样式继承主分支 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            padding: 25px;
+        }
+
+        /* 新增：同步相关样式 */
+        .sync-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: #3498db;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .sync-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .sync-btn, .login-btn, .logout-btn {
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .sync-btn {
+            background-color: #2ecc71;
+            color: white;
+        }
+
+        .sync-btn:hover {
+            background-color: #27ae60;
+        }
+
+        .login-btn {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .logout-btn {
+            background-color: #95a5a6;
+            color: white;
+        }
+
+        .sync-status {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .sync-tooltip {
+            position: relative;
+        }
+
+        .sync-tooltip:hover::after {
+            content: "同步将更新所有设备上的任务";
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            background-color: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 10;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 28px;
+        }
+
+        /* 登录模态框样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            display: none;
+        }
+
+        .modal {
+            background-color: white;
+            padding: 25px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .modal h3 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        .modal-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .modal-form input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .modal-confirm {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .modal-cancel {
+            background-color: #eee;
+        }
+
+        /* 基础功能样式 */
+        .add-task-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .add-task-section input,
+        .add-task-section select,
+        .add-task-section button {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .add-task-section input {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .add-task-section button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        .category-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 25px;
+            justify-content: center;
+        }
+
+        .category-tab {
+            padding: 10px 16px;
+            background-color: #e0e0e0;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+
+        .category-tab.active {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .task-list {
+            list-style: none;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            margin-bottom: 12px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+
+        .task-item.completed .task-text {
+            text-decoration: line-through;
+            opacity: 0.7;
+        }
+
+        .task-checkbox {
+            margin-right: 15px;
+        }
+
+        .task-text {
+            flex: 1;
+        }
+
+        .task-category {
+            background-color: #3498db;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            margin-right: 10px;
+        }
+
+        .delete-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sync-header">
+            <div class="user-info" id="userInfo">
+                <div class="user-avatar">👤</div>
+                <span>未登录</span>
+            </div>
+            <div>
+                <div class="sync-actions">
+                    <button class="login-btn" id="loginBtn" onclick="openLoginModal()">登录</button>
+                    <button class="sync-btn sync-tooltip" id="syncBtn" onclick="syncTasks()" disabled>
+                        <span>🔄 同步</span>
+                    </button>
+                </div>
+                <div class="sync-status" id="syncStatus">未登录，无法同步</div>
+            </div>
+        </div>
+
+        <h1>📋 待办事项（支持同步）</h1>
+
+        <div class="add-task-section">
+            <input type="text" id="taskInput" placeholder="输入新的待办事项...">
+            <select id="categorySelect">
+                <option value="工作">工作</option>
+                <option value="学习">学习</option>
+                <option value="生活">生活</option>
+                <option value="购物">购物</option>
+                <option value="其他">其他</option>
+            </select>
+            <button onclick="addTask()">添加任务</button>
+        </div>
+
+        <div class="category-tabs">
+            <button class="category-tab active" onclick="filterTasks('全部', this)">全部</button>
+            <button class="category-tab" onclick="filterTasks('工作', this)">工作</button>
+            <button class="category-tab" onclick="filterTasks('学习', this)">学习</button>
+            <button class="category-tab" onclick="filterTasks('生活', this)">生活</button>
+            <button class="category-tab" onclick="filterTasks('购物', this)">购物</button>
+            <button class="category-tab" onclick="filterTasks('其他', this)">其他</button>
+        </div>
+
+        <ul class="task-list" id="taskList">
+            <!-- 任务项将动态添加 -->
+        </ul>
+
+        <div class="stats">
+            <span>总计: <span id="totalTasks">0</span> 项</span>
+            <span>完成: <span id="completedTasks">0</span> 项</span>
+        </div>
+    </div>
+
+    <!-- 登录模态框 -->
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal">
+            <h3>账户登录（模拟）</h3>
+            <form class="modal-form" id="loginForm">
+                <input type="text" id="username" placeholder="请输入用户名" required>
+                <input type="password" id="password" placeholder="请输入密码" required>
+                <div class="modal-actions">
+                    <button type="button" class="modal-cancel" onclick="closeLoginModal()">取消</button>
+                    <button type="submit" class="modal-confirm">登录</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 数据与状态管理
+        let tasks = [];
+        let currentUser = null;
+        const LOCAL_STORAGE_KEY = 'syncTasks';
+        const USER_STORAGE_KEY = 'currentUser';
+        const SYNC_STORAGE_KEY = 'cloudSyncData'; // 模拟云端存储
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 检查登录状态
+            currentUser = localStorage.getItem(USER_STORAGE_KEY);
+            if (currentUser) {
+                initLoggedInState(currentUser);
+            } else {
+                // 未登录时加载本地数据
+                tasks = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || [];
+                renderTasks();
+                updateStats();
+            }
+
+            // 登录表单提交
+            document.getElementById('loginForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                
+                // 模拟登录验证（实际项目中对接后端API）
+                if (username && password) {
+                    login(username);
+                    closeLoginModal();
+                }
+            });
+        });
+
+        // 登录相关功能
+        function openLoginModal() {
+            document.getElementById('loginModal').style.display = 'flex';
+        }
+
+        function closeLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+            document.getElementById('loginForm').reset();
+        }
+
+        function login(username) {
+            currentUser = username;
+            localStorage.setItem(USER_STORAGE_KEY, currentUser);
+            initLoggedInState(username);
+        }
+
+        function logout() {
+            if (confirm('确定要退出登录吗？未同步的任务将保存在本地')) {
+                // 保存当前任务到本地
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
+                
+                // 清除登录状态
+                localStorage.removeItem(USER_STORAGE_KEY);
+                currentUser = null;
+                
+                // 切换到未登录状态
+                document.getElementById('userInfo').innerHTML = `
+                    <div class="user-avatar">👤</div>
+                    <span>未登录</span>
+                `;
+                document.getElementById('syncBtn').disabled = true;
+                document.getElementById('loginBtn').style.display = 'flex';
+                document.getElementById('loginBtn').textContent = '登录';
+                document.getElementById('syncStatus').textContent = '未登录，无法同步';
+                
+                // 加载本地数据
+                tasks = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || [];
+                renderTasks();
+                updateStats();
+            }
+        }
+
+        function initLoggedInState(username) {
+            // 更新UI显示
+            document.getElementById('userInfo').innerHTML = `
+                <div class="user-avatar">${username.charAt(0).toUpperCase()}</div>
+                <span>${username}</span>
+            `;
+            document.getElementById('syncBtn').disabled = false;
+            document.getElementById('loginBtn').innerHTML = '退出登录';
+            document.getElementById('loginBtn').className = 'logout-btn';
+            document.getElementById('loginBtn').onclick = logout;
+            
+            // 加载用户的云端数据
+            loadCloudData();
+        }
+
+        // 同步核心功能
+        function loadCloudData() {
+            // 模拟从云端加载数据（实际项目中是API请求）
+            const cloudData = JSON.parse(localStorage.getItem(SYNC_STORAGE_KEY)) || {};
+            tasks = cloudData[currentUser] || [];
+            renderTasks();
+            updateStats();
+            updateSyncStatus('已加载云端数据');
+        }
+
+        function syncTasks() {
+            if (!currentUser) return;
+            
+            updateSyncStatus('正在同步...');
+            
+            // 模拟网络请求延迟
+            setTimeout(() => {
+                // 模拟云端存储
+                const cloudData = JSON.parse(localStorage.getItem(SYNC_STORAGE_KEY)) || {};
+                cloudData[currentUser] = tasks; // 保存当前用户的任务
+                localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify(cloudData));
+                
+                updateSyncStatus(`同步成功 (${new Date().toLocaleTimeString()})`);
+            }, 800);
+        }
+
+        function updateSyncStatus(text) {
+            document.getElementById('syncStatus').textContent = text;
+        }
+
+        // 任务管理功能（与主分支一致，但添加同步触发）
+        function addTask() {
+            const taskInput = document.getElementById('taskInput');
+            const categorySelect = document.getElementById('categorySelect');
+            const text = taskInput.value.trim();
+
+            if (!text) return;
+
+            tasks.push({
+                id: Date.now(),
+                text,
+                completed: false,
+                category: categorySelect.value,
+                updatedAt: new Date().toISOString()
+            });
+
+            saveTasks();
+            renderTasks();
+            updateStats();
+            taskInput.value = '';
+        }
+
+        function toggleTask(id) {
+            tasks = tasks.map(task => {
+                if (task.id === id) {
+                    return { ...task, completed: !task.completed, updatedAt: new Date().toISOString() };
+                }
+                return task;
+            });
+            saveTasks();
+            renderTasks();
+            updateStats();
+        }
+
+        function deleteTask(id) {
+            tasks = tasks.filter(task => task.id !== id);
+            saveTasks();
+            renderTasks();
+            updateStats();
+        }
+
+        function filterTasks(filter, el) {
+            document.querySelectorAll('.category-tab').forEach(tab => tab.classList.remove('active'));
+            el.classList.add('active');
+            renderTasks();
+        }
+
+        // 保存任务（根据登录状态决定保存位置）
+        function saveTasks() {
+            if (currentUser) {
+                // 已登录：本地暂存，等待同步
+                localStorage.setItem(`${LOCAL_STORAGE_KEY}_${currentUser}`, JSON.stringify(tasks));
+            } else {
+                // 未登录：仅本地保存
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
+            }
+        }
+
+        // 渲染与统计
+        function renderTasks() {
+            const taskList = document.getElementById('taskList');
+            const activeFilter = document.querySelector('.category-tab.active').textContent;
+
+            const filteredTasks = activeFilter === '全部' 
+                ? tasks 
+                : tasks.filter(task => task.category === activeFilter);
+
+            taskList.innerHTML = filteredTasks.map(task => `
+                <li class="task-item ${task.completed ? 'completed' : ''}">
+                    <input type="checkbox" class="task-checkbox" ${task.completed ? 'checked' : ''}
+                           onchange="toggleTask(${task.id})">
+                    <span class="task-text">${task.text}</span>
+                    <span class="task-category">${task.category}</span>
+                    <button class="delete-btn" onclick="deleteTask(${task.id})">删除</button>
+                </li>
+            `).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('totalTasks').textContent = tasks.length;
+            document.getElementById('completedTasks').textContent = tasks.filter(t => t.completed).length;
+        }
+    </script>
+</body>
+</html>
+    
